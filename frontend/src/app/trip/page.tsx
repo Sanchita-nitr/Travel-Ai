@@ -10,7 +10,9 @@ import {
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 import axios from "axios";
 import { doc, setDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import GooglePlacesAutocomplete from "react-google-places-autocomplete";
 import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import { FcGoogle } from "react-icons/fc";
 import { db } from "../service/firebaseConfig";
@@ -26,10 +28,8 @@ export default function TripPlannerWrapper() {
 
 // Rename the original TripPlanner function to avoid conflicts
 function TripPlanner() {
-  const [trip, setTrip] = useState<{ destination: string }>({
-    destination: "",
-  });
   const [formData, setFormData] = useState<{
+    destination?: string;
     days?: string;
     budget?: string;
     travelers?: string;
@@ -40,6 +40,7 @@ function TripPlanner() {
   const [itinerary, setItinerary] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     console.log("Itinerary updated:", itinerary);
@@ -180,7 +181,7 @@ function TripPlanner() {
   };
 
   const handleDestinationSelect = (destination: string) => {
-    setTrip({ destination });
+    setFormData((prev) => ({ ...prev, destination })); // Keep previous data
     setSearchTerm(destination);
     setShowSuggestions(false);
   };
@@ -193,7 +194,10 @@ function TripPlanner() {
     }
 
     const validations = [
-      { condition: !trip.destination, message: "Please select a destination." },
+      {
+        condition: !formData.destination,
+        message: "Please select a destination.",
+      },
       {
         condition: !formData.days,
         message: "Please enter the number of days.",
@@ -215,7 +219,10 @@ function TripPlanner() {
       }
     }
     setLoading(true);
-    const FINAL_PROMPT = AI_PROMPT.replace("{destination}", trip.destination)
+    const FINAL_PROMPT = AI_PROMPT.replace(
+      "{destination}",
+      formData.destination || ""
+    )
       .replace("{travelers}", formData.travelers || "")
       .replace("{budget}", formData.budget || "")
       .replace("{days}", formData.days || "");
@@ -243,31 +250,32 @@ function TripPlanner() {
     }
   };
 
-  const saveAiTrip = async (tripData: string) => {
+  const saveAiTrip = async (TripData: string) => {
     setLoading(true);
     try {
-      const user = localStorage.getItem("user")
-        ? JSON.parse(localStorage.getItem("user")!)
-        : null;
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+
       const docId = Date.now().toString();
-      await setDoc(doc(db, "AI Trips", docId), {
+
+      await setDoc(doc(db, "AITrips", docId), {
         userSelection: formData,
-        tripData: tripData,
+        tripData: JSON.parse(TripData),
         userEmail: user?.email,
         id: docId,
       });
+
+      setLoading(false);
+      router.push(`/tripdetails/${docId}`);
       console.log("Trip saved to Firestore!");
     } catch (err) {
       console.error("Error saving trip to Firestore:", err);
       alert("Failed to save trip to database.");
     }
-    setLoading(false);
-  };  
+  };
 
   useEffect(() => {
     console.log("Form data changed:", formData);
-    console.log("Destination:", trip.destination);
-  }, [formData, trip.destination]);
+  }, [formData]);
 
   const login = useGoogleLogin({
     onSuccess: (tokenInfo) => {
@@ -306,7 +314,6 @@ function TripPlanner() {
           <h1 className="text-2xl font-semibold">AI Trip Planner</h1>
         </div>
       </header>
-
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8 flex-grow">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -314,6 +321,19 @@ function TripPlanner() {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
               {/* Destination Input */}
+
+              <div className="block text-sm font-medium text-gray-700">
+                Where would you like to go?
+                <GooglePlacesAutocomplete
+                  apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}
+                />
+                {/* <input 
+                type="text" 
+                className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  placeholder="Enter destination"
+                /> */}
+              </div>
+
               <div className="relative">
                 <label
                   htmlFor="destination"
@@ -330,8 +350,11 @@ function TripPlanner() {
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
                     setShowSuggestions(true);
-                    if (e.target.value !== trip.destination) {
-                      setTrip({ destination: e.target.value });
+                    if (e.target.value !== formData.destination) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        destination: e.target.value,
+                      })); // Keep previous data
                     }
                   }}
                   onFocus={() => setShowSuggestions(true)}

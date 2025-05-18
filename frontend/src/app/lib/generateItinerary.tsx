@@ -6,7 +6,6 @@ const config = {
     maxOutputTokens: 2000,
     topP: 0.8,
     topK: 40,
-    stopSequences: ['\n\n'],
 };
 
 export async function generateItinerary(prompt: string) {
@@ -26,6 +25,7 @@ export async function generateItinerary(prompt: string) {
           parts: [{ text: prompt }],
         },
       ],
+
     });
 
     let fullResponse = "";
